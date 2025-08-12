@@ -20,7 +20,6 @@ def snap_points_to_lines(points: gpd.GeoDataFrame, lines: gpd.GeoDataFrame, tole
 
     # Для каждой точки находим ближайшую линию
     nearest_points = gpd.sjoin_nearest(left_df=points, right_df=lines, how="left", max_distance=tolerance)
-    print(nearest_points)
 
     # Удаляем дубликаты (точка находится на одинаковом расстоянии от нескольких линий)
     nearest_points = nearest_points[~nearest_points.index.duplicated()]
@@ -33,3 +32,4 @@ def snap_points_to_lines(points: gpd.GeoDataFrame, lines: gpd.GeoDataFrame, tole
 
     # Удаляем все столбцы, созданные в процессе обработки
     return nearest_points[points.columns]
+
