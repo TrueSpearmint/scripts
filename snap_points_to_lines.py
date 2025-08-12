@@ -1,43 +1,35 @@
 import geopandas as gpd
-from shapely.ops import nearest_points, snap
+from shapely import get_point, shortest_line
 
 
-def snap_points_to_lines(points_gdf: gpd.GeoDataFrame, lines_gdf: gpd.GeoDataFrame, tolerance: float) -> gpd.GeoDataFrame:
+def snap_points_to_lines(points: gpd.GeoDataFrame, lines: gpd.GeoDataFrame, tolerance: float) -> gpd.GeoDataFrame:
     """
-    Прилипает точки к ближайшим линиям в пределах заданного расстояния.
-    Аналогично функции Snap geometries to layer в QGIS с поведением Prefer closest point, insert extra vertices where required.
+    Привязывает точки к ближайшим линиям в пределах заданного расстояния.
+    Аналогична функции Snap geometries to layer в QGIS с поведением Prefer closest point, insert extra vertices where required.
 
     Args:
-        points_gdf: GeoDataFrame с точками
-        lines_gdf: GeoDataFrame с линиями
+        points: GeoDataFrame с точками
+        lines: GeoDataFrame с линиями
         tolerance: Максимальное расстояние для прилипания
 
     Returns:
-        GeoDataFrame с прилипшими точками
+        GeoDataFrame с привязанными точками
     """
-    # Копируем входные данные
-    points = points_gdf.copy()
-    lines = lines_gdf.copy()
+    # Оставляем только геометрию из lines и записываем в отдельный столбец для использования после sjoin_nearest
+    lines = lines.assign(linegeom=lines.geometry)[["geometry", "linegeom"]]
 
-    # Сохраняем геометрию линии
-    lines["linegeom"] = lines.geometry
+    # Для каждой точки находим ближайшую линию
+    nearest_points = gpd.sjoin_nearest(left_df=points, right_df=lines, how="left", max_distance=tolerance)
+    print(nearest_points)
 
-    # Находим ближайшую линию для каждой точки
-    neareast_lines_to_points = gpd.sjoin_nearest(left_df=points, right_df=lines, how="left", max_distance=tolerance)
-    # Удаляем дубликаты (точка находится на одинаковом расстоянии от двух линий)
-    neareast_lines_to_points = neareast_lines_to_points[~neareast_lines_to_points.index.duplicated()]
+    # Удаляем дубликаты (точка находится на одинаковом расстоянии от нескольких линий)
+    nearest_points = nearest_points[~nearest_points.index.duplicated()]
 
-    # Находим ближайшую точку
-    neareast_lines_to_points["closest_point"] = neareast_lines_to_points.apply(
-        lambda x: nearest_points(x.geometry, x.linegeom)[1] if x.linegeom is not None else None, axis=1
-    )
-
-    # Если есть точка для прилипания, прилипаем. Иначе оставляем исходную геометрию без изменений
-    neareast_lines_to_points["geometry"] = neareast_lines_to_points.apply(
-        lambda x: snap(x.geometry, x.closest_point, tolerance) if x.closest_point is not None else x.geometry, axis=1
-    )
+    # Определяем ближайшую точку на линии (даже если она не является вершиной линии)
+    mask = nearest_points["linegeom"].notna()
+    sl = shortest_line(nearest_points.loc[mask, "geometry"].array, nearest_points.loc[mask, "linegeom"].array)
+    nearest = get_point(sl, 1)
+    nearest_points.loc[mask, "geometry"] = nearest
 
     # Удаляем все столбцы, созданные в процессе обработки
-    neareast_lines_to_points = neareast_lines_to_points[[col for col in neareast_lines_to_points.columns if col in points.columns]]
-
-    return neareast_lines_to_points
+    return nearest_points[points.columns]
