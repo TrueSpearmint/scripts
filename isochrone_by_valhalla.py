@@ -5,6 +5,14 @@ from routingpy import Valhalla
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
+# Параметры построения изохрон
+PROFILE = "pedestrian"
+INTERVAL_TYPE = "time"
+POLYGONS = True
+PREFERENCE = "fastest"
+
+# --------------------
+
 # Инициализация клиента Valhalla с автоматической обработкой повторных запросов и ошибок
 client = Valhalla(
     base_url="https://valhalla1.openstreetmap.de",
@@ -19,11 +27,11 @@ def build_isochrone(client, point, interval):
     try:
         isochrone = client.isochrones(
             locations=[point],
-            profile="pedestrian",
+            profile=PROFILE,
             intervals=[interval],
-            interval_type="time",
-            polygons=True,
-            preference="fastest",
+            interval_type=INTERVAL_TYPE,
+            polygons=POLYGONS,
+            preference=PREFERENCE,
         )
         return isochrone
     except Exception as e:
@@ -31,15 +39,26 @@ def build_isochrone(client, point, interval):
         return None
 
 
-def build_isochrones(gdf, field_name, interval):
-    gdf = gdf.copy()
+def build_isochrones(gdf: gpd.GeoDataFrame, field_name: str, interval: int):
+    """
+    Построение изохрон для точек
+
+    Args:
+        gdf: GeoDataFrame с точками
+        field_name: Имя поля с идентификатором точек
+        interval: Интервал изохроны в секундах или метрах
+
+    Returns:
+        GeoDataFrame с изохронами
+    """
+    gdf = gdf.copy().to_crs("EPSG:4326")
     gdf["lon"] = gdf.geometry.x
     gdf["lat"] = gdf.geometry.y
 
     list_isochrones_geoms = []
+    list_start_ids = []
     list_intervals = []
     list_interval_types = []
-    list_start_names = []
 
     for _, row in tqdm(gdf.iterrows(), total=len(gdf), desc="Building isochrones"):
         point = row.lon, row.lat
@@ -63,19 +82,25 @@ def build_isochrones(gdf, field_name, interval):
                     list_isochrones_geoms.append(None)
                     list_intervals.append(None)
                     list_interval_types.append(None)
-            list_start_names.append(row.get(field_name, None))
+            list_start_ids.append(row.get(field_name, None))
         else:
             print("Не удалось построить ни одну изохрону")
 
     result_gdf = gpd.GeoDataFrame(
         {
             "geometry": list_isochrones_geoms,
+            "start_id": list_start_ids,
             "interval": list_intervals,
             "interval_type": list_interval_types,
-            "start_name": list_start_names,
         },
         geometry="geometry",
-        crs=gdf.crs,
+        crs="EPSG:4326",
     )
 
     return result_gdf
+
+
+# Пример использования
+gdf_points = gpd.read_file("points.gpkg", use_arrow=True)
+result = build_isochrones(gdf_points, "point_id", 15)
+result.to_file("isochrones.gpkg")
