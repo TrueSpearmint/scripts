@@ -9,7 +9,6 @@ from tqdm import tqdm
 PROFILE = "pedestrian"  # https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/#costing-models
 INTERVAL_TYPE = "time"  # time | distance
 POLYGONS = True
-PREFERENCE = "shortest"  # shortest | fastest
 
 # --------------------
 
@@ -32,7 +31,6 @@ def build_isochrone(client, point, interval):
             intervals=[interval],
             interval_type=INTERVAL_TYPE,
             polygons=POLYGONS,
-            preference=PREFERENCE,
         )
         return isochrone
     except Exception as e:
