@@ -1,4 +1,4 @@
-# import time
+import time
 
 import geopandas as gpd
 from routingpy import Valhalla
@@ -6,14 +6,15 @@ from shapely.geometry import Polygon
 from tqdm import tqdm
 
 # Параметры построения изохрон
-PROFILE = "pedestrian"
-INTERVAL_TYPE = "time"
+PROFILE = "pedestrian"  # https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/#costing-models
+INTERVAL_TYPE = "time"  # time | distance
 POLYGONS = True
-PREFERENCE = "fastest"
+PREFERENCE = "shortest"  # shortest | fastest
 
 # --------------------
 
 # Инициализация клиента Valhalla с автоматической обработкой повторных запросов и ошибок
+REQUEST_INTERVAL = 2  # не известно точные ограничения, выберем 1 запрос раз в 2 секунды
 client = Valhalla(
     base_url="https://valhalla1.openstreetmap.de",
     timeout=10,
@@ -67,6 +68,7 @@ def build_isochrones(gdf: gpd.GeoDataFrame, field_name: str, interval: int):
         isochrones = build_isochrone(client, point, interval)
         # end_time = time.time()
         # print(f"Время построения изохроны: {end_time - start_time} секунд")
+        time.sleep(REQUEST_INTERVAL)
         if isochrones:
             for iso in isochrones:
                 if iso:
@@ -102,5 +104,5 @@ def build_isochrones(gdf: gpd.GeoDataFrame, field_name: str, interval: int):
 
 # Пример использования
 gdf_points = gpd.read_file("points.gpkg", use_arrow=True)
-result = build_isochrones(gdf_points, "point_id", 15)
-result.to_file("isochrones.gpkg")
+gdf_isochrones = build_isochrones(gdf_points, "point_id", 900)
+gdf_isochrones.to_file("isochrones.gpkg")
